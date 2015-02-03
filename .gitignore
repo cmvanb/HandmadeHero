@@ -1,0 +1,5 @@
+# Debug files
+*.ilk
+*.obj
+*.pdb
+*.suo
