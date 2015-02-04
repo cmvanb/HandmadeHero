@@ -1,0 +1,7 @@
+{
+  "cmd": "{PROJECT_PATH}/code/build-atom.bat",
+  "args": [],
+  "sh": false,
+  "cwd": "{PROJECT_PATH}",
+  "env": {}
+}
