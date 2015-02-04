@@ -360,17 +360,15 @@ int CALLBACK WinMain(
                         int16 StickX = Pad->sThumbLX;
                         int16 StickY = Pad->sThumbLY;
 
-                        if (AButton)
-                        {
-                            YOffset += 2;
-                        }
+                        XOffset += StickX >> 12;
+                        YOffset += StickY >> 12;
 
                         XINPUT_VIBRATION Vibration;
 
                         Vibration.wLeftMotorSpeed = 0;
                         Vibration.wRightMotorSpeed = 0;
 
-                        if (BButton)
+                        if (AButton)
                         {
                             Vibration.wLeftMotorSpeed = 60000;
                             Vibration.wRightMotorSpeed = 60000;
@@ -390,8 +388,6 @@ int CALLBACK WinMain(
                 win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 
                 Win32DisplayBufferInWindow(&GlobalBackBuffer, DeviceContext, Dimension.Width, Dimension.Height);
-
-                ++XOffset;
             }
         }
         else
