@@ -515,7 +515,11 @@ int CALLBACK WinMain(
                     DWORD ByteToLock = RunningSampleIndex * BytesPerSample % SecondaryBufferSize;
                     DWORD BytesToWrite;
 
-                    if (ByteToLock > PlayCursor)
+                    if (ByteToLock == PlayCursor)
+                    {
+                        BytesToWrite = SecondaryBufferSize;
+                    }
+                    else if (ByteToLock > PlayCursor)
                     {
                         BytesToWrite = (SecondaryBufferSize - ByteToLock);
                         BytesToWrite += PlayCursor;
