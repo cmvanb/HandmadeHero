@@ -29,6 +29,8 @@ typedef uint64_t uint64;
 typedef float real32;
 typedef double real64;
 
+typedef int32 bool32;
+
 struct win32_offscreen_buffer
 {
     BITMAPINFO Info;
@@ -48,7 +50,7 @@ struct win32_window_dimension
 
 
 // TODO: Global for now.
-global_variable bool GlobalRunning;
+global_variable bool32 GlobalRunning;
 global_variable win32_offscreen_buffer GlobalBackBuffer;
 global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 
@@ -84,17 +86,26 @@ internal void Win32LoadXInput(void)
     // TODO: Test on windows 8.
     HMODULE XInputLibrary = LoadLibraryA("xinput1_3.dll");
 
-    /*
     if (!XInputLibrary)
     {
+        OutputDebugStringA("unable to load 1.3, trying 1.4\n");
         HMODULE XInputLibrary = LoadLibraryA("xinput1_4.dll");
     }
-    */
+
+    if (!XInputLibrary)
+    {
+        OutputDebugStringA("unable to load 1.4, trying 9.1.0\n");
+        HMODULE XInputLibrary = LoadLibraryA("xinput9_1_0.dll");
+    }
 
     if (XInputLibrary)
     {
         XInputGetState = (x_input_get_state *)GetProcAddress(XInputLibrary, "XInputGetState");
         XInputSetState = (x_input_set_state *)GetProcAddress(XInputLibrary, "XInputSetState");
+    }
+    else
+    {
+        OutputDebugStringA("failed to load xinput DLL\n");
     }
 }
 
@@ -299,8 +310,8 @@ internal LRESULT CALLBACK Win32MainWindowCallback(
         case WM_KEYUP:
         {
             uint32 VKCode = WParam;
-            bool WasDown = ((LParam & (1 << 30)) != 0);
-            bool IsDown = ((LParam & (1 << 31)) == 0);
+            bool32 WasDown = ((LParam & (1 << 30)) != 0);
+            bool32 IsDown = ((LParam & (1 << 31)) == 0);
 
             if (WasDown != IsDown)
             {
@@ -354,7 +365,7 @@ internal LRESULT CALLBACK Win32MainWindowCallback(
                 }
             }
 
-            bool AltKeyDown = ((LParam & (1 << 29)) != 0);
+            bool32 AltKeyDown = ((LParam & (1 << 29)) != 0);
 
             if ((VKCode == VK_F4) && AltKeyDown)
             {
@@ -545,26 +556,26 @@ int CALLBACK WinMain(
                         // Controller is plugged in.
                         XINPUT_GAMEPAD *Pad = &ControllerState.Gamepad;
 
-                        bool Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
-                        bool Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
-                        bool Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
-                        bool Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
-                        bool Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
-                        bool Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
-                        bool LeftThumb = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB);
-                        bool RightThumb = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB);
-                        bool LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
-                        bool RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
-                        bool AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
-                        bool BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
-                        bool XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
-                        bool YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
+                        bool32 Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+                        bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+                        bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+                        bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+                        bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+                        bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+                        bool32 LeftThumb = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB);
+                        bool32 RightThumb = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB);
+                        bool32 LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
+                        bool32 RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
+                        bool32 AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
+                        bool32 BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
+                        bool32 XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
+                        bool32 YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
 
                         int16 StickX = Pad->sThumbLX;
                         int16 StickY = Pad->sThumbLY;
 
-                        XOffset += StickX >> 12;
-                        YOffset += StickY >> 12;
+                        XOffset += StickX / 8192;
+                        YOffset -= StickY / 8192;
 
                         XINPUT_VIBRATION Vibration;
 
