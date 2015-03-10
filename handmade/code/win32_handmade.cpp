@@ -2,13 +2,27 @@
     Handmade Hero
 */
 
-#include <windows.h>
-#include <stdint.h>
-#include <xinput.h>
-#include <dsound.h>
+/*
+    TODO: Not a final platform layer.
 
-// TODO: implement sin ourselves
-#include <math.h>
+    - Saved game locations
+    - Getting a handle to our own executable file
+    - Asset loading path
+    - Threading (launch a path)
+    - Raw input (support for multiple keyboards)
+    - Sleep/timeBeginPeriod
+    - ClipCursor (multimonitor support)
+    - Fullscreen support
+    - WM_SETCURSOR (control cursor visibility)
+    - QueryCancelAutoplay
+    - WM_ACTIVEAPP (for when we are not the active application)
+    - Blit speed improvements (BitBlt)
+    - Hardware acceleration (OpenGL or Direct3D or both?)
+    - GetKeyboardLayout (for international keyboards)
+    - ...
+*/
+
+#include <stdint.h>
 
 #define internal static
 #define local_persist static
@@ -30,6 +44,16 @@ typedef float real32;
 typedef double real64;
 
 typedef int32 bool32;
+
+#include "handmade.cpp"
+
+#include <windows.h>
+#include <stdio.h>
+#include <xinput.h>
+#include <dsound.h>
+
+// TODO: implement sin ourselves
+#include <math.h>
 
 struct win32_offscreen_buffer
 {
@@ -80,6 +104,12 @@ global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
+
+void *PlatformLoadFile(char* FileName)
+{
+    // TODO: implement
+    return(0);
+}
 
 internal void Win32LoadXInput(void)
 {
@@ -202,28 +232,6 @@ internal win32_window_dimension Win32GetWindowDimension(HWND Window)
     Result.Height = ClientRect.bottom - ClientRect.top;
 
     return(Result);
-}
-
-internal void RenderWeirdGradient(win32_offscreen_buffer *Buffer, int XOffset, int YOffset)
-{
-    uint8 *Row = (uint8 *)Buffer->Memory;
-
-    for (int Y = 0; Y < Buffer->Height; ++Y)
-    {
-        uint32 *Pixel = (uint32 *)Row;
-
-        for (int X = 0; X < Buffer->Width; ++X)
-        {
-            // BB GG RR xx
-            uint8 Blue = X + XOffset;
-            uint8 Green = Y + YOffset;
-            uint8 Red = 0;
-
-            *Pixel++ = ((Green << 8) | Blue);
-        }
-
-        Row += Buffer->Pitch;
-    }
 }
 
 internal void Win32ResizeDIBSection(
@@ -478,6 +486,10 @@ int CALLBACK WinMain(
     LPSTR CommandLine,
     int ShowCode)
 {
+    LARGE_INTEGER PerfCounterFrequencyResult;
+    QueryPerformanceFrequency(&PerfCounterFrequencyResult);
+    int64 PerfCountFrequency = PerfCounterFrequencyResult.QuadPart;
+
     Win32LoadXInput();
 
     // Initialize struct members to zero.
@@ -518,7 +530,7 @@ int CALLBACK WinMain(
 
             SoundOutput.SamplesPerSecond = 48000;
             SoundOutput.ToneHerz = 256;
-            SoundOutput.ToneVolume = 8000;
+            SoundOutput.ToneVolume = 2000;
             SoundOutput.RunningSampleIndex = 0;
             SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond / SoundOutput.ToneHerz;
             SoundOutput.BytesPerSample = sizeof(int16) * 2;
@@ -531,6 +543,10 @@ int CALLBACK WinMain(
             GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
             GlobalRunning = true;
+
+            LARGE_INTEGER LastCounter;
+            QueryPerformanceCounter(&LastCounter);
+            int64 LastCycleCount = __rdtsc();
 
             while (GlobalRunning)
             {
@@ -595,11 +611,17 @@ int CALLBACK WinMain(
                     }
                     else
                     {
-                        // Controller is NOT plugged in.
+                        // Controller is not available
                     }
                 }
 
-                RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
+                game_offscreen_buffer Buffer = {};
+                Buffer.Memory = GlobalBackBuffer.Memory;
+                Buffer.Width = GlobalBackBuffer.Width;
+                Buffer.Height = GlobalBackBuffer.Height;
+                Buffer.Pitch = GlobalBackBuffer.Pitch;
+
+                GameUpdateAndRender(&Buffer);
 
                 // DirectSound output test
                 DWORD PlayCursor;
@@ -627,6 +649,26 @@ int CALLBACK WinMain(
                 win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 
                 Win32DisplayBufferInWindow(&GlobalBackBuffer, DeviceContext, Dimension.Width, Dimension.Height);
+
+                int64 EndCycleCount = __rdtsc();
+
+                LARGE_INTEGER EndCounter;
+                QueryPerformanceCounter(&EndCounter);
+
+                int64 CyclesElapsed = EndCycleCount - LastCycleCount;
+                int64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+                real32 MillisecondsPerFrame = (1000.0f * (real32)CounterElapsed) / (real32)PerfCountFrequency;
+                real32 FPS = (real32)PerfCountFrequency / (real32)CounterElapsed;
+                real32 MCPF = (real32)CyclesElapsed / (1000.0f * 1000.0f);
+
+/*
+                char Buffer[256];
+                sprintf(Buffer, "%fms/f, %ff/s, %fmc/f\n", MillisecondsPerFrame, FPS, MCPF);
+                OutputDebugStringA(Buffer);
+*/
+
+                LastCounter = EndCounter;
+                LastCycleCount = EndCycleCount;
             }
         }
         else
