@@ -1,7 +1,7 @@
 #if !defined(HANDMADE_H)
-/*
+/* =============================================================================
     Handmade Hero
-*/
+============================================================================= */
 
 // Services that the platform layer provides to the game
 
@@ -19,8 +19,16 @@ struct game_offscreen_buffer
     int Pitch;
 };
 
+struct game_sound_output_buffer
+{
+    int SamplesPerSecond;
+    int SampleCount;
+    int16 *Samples;
+};
+
 // 4 things: timing, input, bitmap buffer to use, sound buffer to use
-internal void GameUpdateAndRender(game_offscreen_buffer *Buffer);
+internal void GameUpdateAndRender(game_offscreen_buffer *Buffer, int BlueOffset,
+    int GreenOffset, game_sound_output_buffer *SoundBuffer, int ToneHz);
 
 #define HANDMADE_H
 #endif
