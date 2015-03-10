@@ -611,6 +611,7 @@ int CALLBACK WinMain(
 
                         // TODO: handle deadzones
                         // TODO: min/max macros
+                        // TODO: collapse to single function
 
                         real32 X;
 
