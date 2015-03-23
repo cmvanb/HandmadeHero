@@ -47,6 +47,7 @@ typedef double real64;
 
 typedef int32 bool32;
 
+#include "handmade.h"
 #include "handmade.cpp"
 
 #include <windows.h>
@@ -89,11 +90,116 @@ global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 
-void *PlatformLoadFile(char* FileName)
+#if HANDMADE_INTERNAL
+internal debug_read_file_result DEBUGPlatformReadEntireFile(char *Filename)
 {
-    // TODO: implement
-    return(0);
+    debug_read_file_result Result = {};
+
+    HANDLE FileHandle = CreateFileA(
+        Filename,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        0,
+        OPEN_EXISTING,
+        0,
+        0
+    );
+
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER FileSize;
+
+        if (GetFileSizeEx(FileHandle, &FileSize))
+        {
+            uint32 FileSize32 = SafeTruncateUInt64(FileSize.QuadPart);
+            Result.Contents = VirtualAlloc(0, FileSize32, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+
+            if (Result.Contents)
+            {
+                DWORD BytesRead;
+
+                if (ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, 0)
+                    && (FileSize32 == BytesRead))
+                {
+                    // success
+                    Result.ContentsSize = FileSize32;
+                }
+                else
+                {
+                    // TODO: Log error
+                    DEBUGPlatformFreeFileMemory(Result.Contents);
+                    Result.Contents = 0;
+                }
+            }
+            else
+            {
+                // TODO: Log error
+            }
+        }
+        else
+        {
+            // TODO: Log error
+        }
+
+        CloseHandle(FileHandle);
+    }
+    else
+    {
+        // TODO: Log error
+    }
+
+    return(Result);
 }
+
+internal void DEBUGPlatformFreeFileMemory(void *Memory)
+{
+    if (Memory)
+    {
+        VirtualFree(Memory, 0, MEM_RELEASE);
+    }
+}
+
+internal bool32 DEBUGPlatformWriteEntireFile(
+    char *Filename,
+    uint32 MemorySize,
+    void *Memory)
+{
+    bool32 Result = false;
+
+    HANDLE FileHandle = CreateFileA(
+        Filename,
+        GENERIC_WRITE,
+        0,
+        0,
+        CREATE_ALWAYS,
+        0,
+        0
+    );
+
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD BytesWritten;
+
+        if (WriteFile(FileHandle, Memory, MemorySize, &BytesWritten, 0))
+        {
+            // success
+            Result = (BytesWritten == MemorySize);
+        }
+        else
+        {
+            // TODO: Log error
+        }
+
+        CloseHandle(FileHandle);
+    }
+    else
+    {
+        // TODO: Log error
+    }
+
+    return(Result);
+}
+#endif
 
 internal void Win32LoadXInput(void)
 {

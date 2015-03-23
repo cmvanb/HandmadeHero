@@ -61,6 +61,20 @@ internal void GameUpdateAndRender(game_memory *Memory, game_input *Input,
 
     if (!Memory->IsInitialized)
     {
+        char *Filename = __FILE__;
+
+        debug_read_file_result File = DEBUGPlatformReadEntireFile(Filename);
+
+        if (File.Contents)
+        {
+            DEBUGPlatformWriteEntireFile(
+                "test.out",
+                File.ContentsSize,
+                File.Contents);
+
+            DEBUGPlatformFreeFileMemory(File.Contents);
+        }
+
         GameState->ToneHz = 256;
 
         // NOTE: Maybe more appropriate in platform layer.

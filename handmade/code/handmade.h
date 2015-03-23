@@ -26,9 +26,31 @@
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
+inline uint32 SafeTruncateUInt64(uint64 Value)
+{
+    Assert(Value <= 0xFFFFFFFF);
+    uint32 Result = (uint32)Value;
+    return(Result);
+}
+
 // Services that the platform layer provides to the game
 
-// TODO: ...
+#if HANDMADE_INTERNAL
+// NOTE: NOT for usage in shipped game! They are blocking and the write doesn't
+// protect against lost data.
+struct debug_read_file_result
+{
+    uint32 ContentsSize;
+    void *Contents;
+};
+
+internal debug_read_file_result DEBUGPlatformReadEntireFile(char *Filename);
+internal void DEBUGPlatformFreeFileMemory(void *Memory);
+internal bool32 DEBUGPlatformWriteEntireFile(
+    char *Filename,
+    uint32 MemorySize,
+    void *Memory);
+#endif
 
 // Services that the game provides to the platform layer
 // May expand in future - sound in separate thread, etc.
