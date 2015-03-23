@@ -3,6 +3,27 @@
     Handmade Hero
 ============================================================================= */
 
+/*
+    HANDMADE_INTERNAL:
+        0 - Build for public release.
+        1 - Build for developers only.
+
+    HANDMADE_SLOW
+        0 - No slow code allowed!
+        1 - Slow code is ok.
+*/
+
+#if HANDMADE_SLOW
+#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
+#else
+#define Assert(Expression)
+#endif
+
+#define Kilobytes(Value) ((Value) * 1024)
+#define Megabytes(Value) (Kilobytes(Value) * 1024)
+#define Gigabytes(Value) (Megabytes(Value) * 1024)
+#define Terabytes(Value) (Gigabytes(Value) * 1024)
+
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
 // Services that the platform layer provides to the game
@@ -63,12 +84,33 @@ struct game_controller_input
 
 struct game_input
 {
+    // TODO: Insert clock values here.
     game_controller_input Controllers[4];
 };
 
-// 4 things: timing, input, bitmap buffer to use, sound buffer to use
-internal void GameUpdateAndRender(game_input *Input,
-    game_offscreen_buffer *Buffer, game_sound_output_buffer *SoundBuffer);
+struct game_memory
+{
+    bool32 IsInitialized;
+
+    uint64 PermanentStorageSize;
+    void *PermanentStorage; // NOTE: REQUIRED to be cleared to zero at startup.
+
+    uint64 TransientStorageSize;
+    void *TransientStorage; // NOTE: REQUIRED to be cleared to zero at startup.
+};
+
+internal void GameUpdateAndRender(game_memory *Memory,
+    game_input *Input, game_offscreen_buffer *Buffer,
+    game_sound_output_buffer *SoundBuffer);
+
+// ---------
+
+struct game_state
+{
+    int ToneHz;
+    int GreenOffset;
+    int BlueOffset;
+};
 
 #define HANDMADE_H
 #endif

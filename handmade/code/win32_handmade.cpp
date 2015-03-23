@@ -553,232 +553,261 @@ int CALLBACK WinMain(
                 MEM_RESERVE|MEM_COMMIT,
                 PAGE_READWRITE);
 
-            game_input Input[2];
-            game_input *NewInput = &Input[0];
-            game_input *OldInput = &Input[1];
+#if HANDMADE_INTERNAL
+            LPVOID BaseAddress = (LPVOID)Terabytes((uint64)2);
+#else
+            LPVOID BaseAddress = 0;
+#endif
 
-            LARGE_INTEGER LastCounter;
-            QueryPerformanceCounter(&LastCounter);
-            int64 LastCycleCount = __rdtsc();
+            game_memory GameMemory = {};
+            GameMemory.PermanentStorageSize = Megabytes(64);
+            GameMemory.TransientStorageSize = Gigabytes((uint64)4);// WTF? 4 gigs??
 
-            while (GlobalRunning)
+            uint64 TotalSize = GameMemory.PermanentStorageSize
+                + GameMemory.TransientStorageSize;
+            GameMemory.PermanentStorage = VirtualAlloc(
+                BaseAddress,
+                TotalSize,
+                MEM_RESERVE|MEM_COMMIT,
+                PAGE_READWRITE);
+            GameMemory.TransientStorage = ((uint8 *)GameMemory.PermanentStorage
+                + GameMemory.PermanentStorageSize);
+
+            if (Samples
+                && GameMemory.PermanentStorage
+                && GameMemory.TransientStorage)
             {
-                MSG Message;
+                game_input Input[2];
+                game_input *NewInput = &Input[0];
+                game_input *OldInput = &Input[1];
 
-                while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
+                LARGE_INTEGER LastCounter;
+                QueryPerformanceCounter(&LastCounter);
+                int64 LastCycleCount = __rdtsc();
+
+                while (GlobalRunning)
                 {
-                    if (Message.message == WM_QUIT)
+                    MSG Message;
+
+                    while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
                     {
-                        GlobalRunning = false;
+                        if (Message.message == WM_QUIT)
+                        {
+                            GlobalRunning = false;
+                        }
+
+                        TranslateMessage(&Message);
+                        DispatchMessage(&Message);
                     }
 
-                    TranslateMessage(&Message);
-                    DispatchMessage(&Message);
-                }
+                    int MaxControllerCount = XUSER_MAX_COUNT;
 
-                int MaxControllerCount = XUSER_MAX_COUNT;
-
-                if (MaxControllerCount > ArrayCount(NewInput->Controllers))
-                {
-                    MaxControllerCount = ArrayCount(NewInput->Controllers);
-                }
-
-                for (DWORD ControllerIndex = 0;
-                    ControllerIndex < MaxControllerCount;
-                    ++ControllerIndex)
-                {
-                    game_controller_input *OldController =
-                        &OldInput->Controllers[ControllerIndex];
-                    game_controller_input *NewController =
-                        &NewInput->Controllers[ControllerIndex];
-
-                    XINPUT_STATE ControllerState;
-
-                    if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+                    if (MaxControllerCount > ArrayCount(NewInput->Controllers))
                     {
-                        // Controller is plugged in.
-                        XINPUT_GAMEPAD *Pad = &ControllerState.Gamepad;
+                        MaxControllerCount = ArrayCount(NewInput->Controllers);
+                    }
 
-                        // TODO: DPad
-                        bool32 Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
-                        bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
-                        bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
-                        bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+                    for (DWORD ControllerIndex = 0;
+                        ControllerIndex < MaxControllerCount;
+                        ++ControllerIndex)
+                    {
+                        game_controller_input *OldController =
+                            &OldInput->Controllers[ControllerIndex];
+                        game_controller_input *NewController =
+                            &NewInput->Controllers[ControllerIndex];
 
-                        NewController->IsAnalog = true;
-                        NewController->StartX = OldController->EndX;
-                        NewController->StartY = OldController->EndY;
+                        XINPUT_STATE ControllerState;
 
-                        // TODO: handle deadzones
-                        // TODO: min/max macros
-                        // TODO: collapse to single function
-
-                        real32 X;
-
-                        if (Pad->sThumbLX < 0)
+                        if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
                         {
-                            X = (real32)Pad->sThumbLX / 32768.0f;
+                            // Controller is plugged in.
+                            XINPUT_GAMEPAD *Pad = &ControllerState.Gamepad;
+
+                            // TODO: DPad
+                            bool32 Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+                            bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+                            bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+                            bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+
+                            NewController->IsAnalog = true;
+                            NewController->StartX = OldController->EndX;
+                            NewController->StartY = OldController->EndY;
+
+                            // TODO: handle deadzones
+                            // TODO: min/max macros
+                            // TODO: collapse to single function
+
+                            real32 X;
+
+                            if (Pad->sThumbLX < 0)
+                            {
+                                X = (real32)Pad->sThumbLX / 32768.0f;
+                            }
+                            else
+                            {
+                                X = (real32)Pad->sThumbLX / 32767.0f;
+                            }
+
+                            NewController->MinX = NewController->MaxX = NewController->EndX = X;
+
+                            real32 Y;
+
+                            if (Pad->sThumbLY < 0)
+                            {
+                                Y = (real32)Pad->sThumbLY / 32768.0f;
+                            }
+                            else
+                            {
+                                Y = (real32)Pad->sThumbLY / 32767.0f;
+                            }
+
+                            NewController->MinY = NewController->MaxY = NewController->EndY = Y;
+
+                            Win32ProcessXInputDigitalButton(
+                                Pad->wButtons,
+                                &OldController->Down,
+                                XINPUT_GAMEPAD_A,
+                                &NewController->Down);
+                            Win32ProcessXInputDigitalButton(
+                                Pad->wButtons,
+                                &OldController->Right,
+                                XINPUT_GAMEPAD_B,
+                                &NewController->Right);
+                            Win32ProcessXInputDigitalButton(
+                                Pad->wButtons,
+                                &OldController->Left,
+                                XINPUT_GAMEPAD_X,
+                                &NewController->Left);
+                            Win32ProcessXInputDigitalButton(
+                                Pad->wButtons,
+                                &OldController->Up,
+                                XINPUT_GAMEPAD_Y,
+                                &NewController->Up);
+                            Win32ProcessXInputDigitalButton(
+                                Pad->wButtons,
+                                &OldController->LeftShoulder,
+                                XINPUT_GAMEPAD_LEFT_SHOULDER,
+                                &NewController->LeftShoulder);
+                            Win32ProcessXInputDigitalButton(
+                                Pad->wButtons,
+                                &OldController->RightShoulder,
+                                XINPUT_GAMEPAD_RIGHT_SHOULDER,
+                                &NewController->RightShoulder);
+
+                            /*
+                            bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+                            bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+                            bool32 LeftThumb = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB);
+                            bool32 RightThumb = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB);
+                            */
+
+                            /*
+                            XINPUT_VIBRATION Vibration;
+
+                            Vibration.wLeftMotorSpeed = 0;
+                            Vibration.wRightMotorSpeed = 0;
+
+                            if (AButton)
+                            {
+                                Vibration.wLeftMotorSpeed = 60000;
+                                Vibration.wRightMotorSpeed = 60000;
+                            }
+
+                            XInputSetState(0, &Vibration);
+                            */
                         }
                         else
                         {
-                            X = (real32)Pad->sThumbLX / 32767.0f;
+                            // Controller is not available
                         }
+                    }
 
-                        NewController->MinX = NewController->MaxX = NewController->EndX = X;
+                    DWORD ByteToLock = 0;
+                    DWORD BytesToWrite = 0;
+                    DWORD TargetCursor = 0;
+                    DWORD PlayCursor = 0;
+                    DWORD WriteCursor = 0;
+                    bool32 SoundIsValid = false;
 
-                        real32 Y;
+                    // TODO: tighten up sound logic so we know where we should be
+                    // writing to and can anticipate the time spent in the game update.
+                    if (SUCCEEDED(GlobalSecondaryBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor)))
+                    {
+                        ByteToLock = (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
+                        TargetCursor = (PlayCursor + (SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample)) % SoundOutput.SecondaryBufferSize;
 
-                        if (Pad->sThumbLY < 0)
+                        if (ByteToLock > TargetCursor)
                         {
-                            Y = (real32)Pad->sThumbLY / 32768.0f;
+                            BytesToWrite = (SoundOutput.SecondaryBufferSize - ByteToLock);
+                            BytesToWrite += TargetCursor;
                         }
                         else
                         {
-                            Y = (real32)Pad->sThumbLY / 32767.0f;
+                            BytesToWrite = TargetCursor - ByteToLock;
                         }
 
-                        NewController->MinY = NewController->MaxY = NewController->EndY = Y;
-
-                        Win32ProcessXInputDigitalButton(
-                            Pad->wButtons,
-                            &OldController->Down,
-                            XINPUT_GAMEPAD_A,
-                            &NewController->Down);
-                        Win32ProcessXInputDigitalButton(
-                            Pad->wButtons,
-                            &OldController->Right,
-                            XINPUT_GAMEPAD_B,
-                            &NewController->Right);
-                        Win32ProcessXInputDigitalButton(
-                            Pad->wButtons,
-                            &OldController->Left,
-                            XINPUT_GAMEPAD_X,
-                            &NewController->Left);
-                        Win32ProcessXInputDigitalButton(
-                            Pad->wButtons,
-                            &OldController->Up,
-                            XINPUT_GAMEPAD_Y,
-                            &NewController->Up);
-                        Win32ProcessXInputDigitalButton(
-                            Pad->wButtons,
-                            &OldController->LeftShoulder,
-                            XINPUT_GAMEPAD_LEFT_SHOULDER,
-                            &NewController->LeftShoulder);
-                        Win32ProcessXInputDigitalButton(
-                            Pad->wButtons,
-                            &OldController->RightShoulder,
-                            XINPUT_GAMEPAD_RIGHT_SHOULDER,
-                            &NewController->RightShoulder);
-
-                        /*
-                        bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
-                        bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
-                        bool32 LeftThumb = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB);
-                        bool32 RightThumb = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB);
-                        */
-
-                        /*
-                        XINPUT_VIBRATION Vibration;
-
-                        Vibration.wLeftMotorSpeed = 0;
-                        Vibration.wRightMotorSpeed = 0;
-
-                        if (AButton)
-                        {
-                            Vibration.wLeftMotorSpeed = 60000;
-                            Vibration.wRightMotorSpeed = 60000;
-                        }
-
-                        XInputSetState(0, &Vibration);
-                        */
+                        SoundIsValid = true;
                     }
-                    else
+
+                    game_offscreen_buffer Buffer = {};
+                    Buffer.Memory = GlobalBackBuffer.Memory;
+                    Buffer.Width = GlobalBackBuffer.Width;
+                    Buffer.Height = GlobalBackBuffer.Height;
+                    Buffer.Pitch = GlobalBackBuffer.Pitch;
+
+                    game_sound_output_buffer SoundBuffer = {};
+                    SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
+                    SoundBuffer.SampleCount = BytesToWrite / SoundOutput.BytesPerSample;
+                    SoundBuffer.Samples = Samples;
+
+                    GameUpdateAndRender(&GameMemory, NewInput, &Buffer, &SoundBuffer);
+
+                    // DirectSound output test
+                    if (SoundIsValid)
                     {
-                        // Controller is not available
-                    }
-                }
-
-                DWORD ByteToLock = 0;
-                DWORD BytesToWrite = 0;
-                DWORD TargetCursor = 0;
-                DWORD PlayCursor = 0;
-                DWORD WriteCursor = 0;
-                bool32 SoundIsValid = false;
-
-                // TODO: tighten up sound logic so we know where we should be
-                // writing to and can anticipate the time spent in the game update.
-                if (SUCCEEDED(GlobalSecondaryBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor)))
-                {
-                    ByteToLock = (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
-                    TargetCursor = (PlayCursor + (SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample)) % SoundOutput.SecondaryBufferSize;
-
-                    if (ByteToLock > TargetCursor)
-                    {
-                        BytesToWrite = (SoundOutput.SecondaryBufferSize - ByteToLock);
-                        BytesToWrite += TargetCursor;
-                    }
-                    else
-                    {
-                        BytesToWrite = TargetCursor - ByteToLock;
+                        Win32FillSoundBuffer(
+                            &SoundOutput,
+                            ByteToLock,
+                            BytesToWrite,
+                            &SoundBuffer);
                     }
 
-                    SoundIsValid = true;
+                    win32_window_dimension Dimension = Win32GetWindowDimension(Window);
+
+                    Win32DisplayBufferInWindow(
+                        &GlobalBackBuffer,
+                        DeviceContext,
+                        Dimension.Width,
+                        Dimension.Height);
+
+                    int64 EndCycleCount = __rdtsc();
+
+                    LARGE_INTEGER EndCounter;
+                    QueryPerformanceCounter(&EndCounter);
+
+                    int64 CyclesElapsed = EndCycleCount - LastCycleCount;
+                    int64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+                    real32 MillisecondsPerFrame = (1000.0f * (real32)CounterElapsed) / (real32)PerfCountFrequency;
+                    real32 FPS = (real32)PerfCountFrequency / (real32)CounterElapsed;
+                    real32 MCPF = (real32)CyclesElapsed / (1000.0f * 1000.0f);
+
+    /*
+                    char Buffer[256];
+                    sprintf(Buffer, "%fms/f, %ff/s, %fmc/f\n", MillisecondsPerFrame, FPS, MCPF);
+                    OutputDebugStringA(Buffer);
+    */
+
+                    LastCounter = EndCounter;
+                    LastCycleCount = EndCycleCount;
+
+                    game_input *Temp = NewInput;
+                    NewInput = OldInput;
+                    OldInput = Temp;
                 }
-
-                game_offscreen_buffer Buffer = {};
-                Buffer.Memory = GlobalBackBuffer.Memory;
-                Buffer.Width = GlobalBackBuffer.Width;
-                Buffer.Height = GlobalBackBuffer.Height;
-                Buffer.Pitch = GlobalBackBuffer.Pitch;
-
-                game_sound_output_buffer SoundBuffer = {};
-                SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
-                SoundBuffer.SampleCount = BytesToWrite / SoundOutput.BytesPerSample;
-                SoundBuffer.Samples = Samples;
-
-                GameUpdateAndRender(NewInput, &Buffer, &SoundBuffer);
-
-                // DirectSound output test
-                if (SoundIsValid)
-                {
-                    Win32FillSoundBuffer(
-                        &SoundOutput,
-                        ByteToLock,
-                        BytesToWrite,
-                        &SoundBuffer);
-                }
-
-                win32_window_dimension Dimension = Win32GetWindowDimension(Window);
-
-                Win32DisplayBufferInWindow(
-                    &GlobalBackBuffer,
-                    DeviceContext,
-                    Dimension.Width,
-                    Dimension.Height);
-
-                int64 EndCycleCount = __rdtsc();
-
-                LARGE_INTEGER EndCounter;
-                QueryPerformanceCounter(&EndCounter);
-
-                int64 CyclesElapsed = EndCycleCount - LastCycleCount;
-                int64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
-                real32 MillisecondsPerFrame = (1000.0f * (real32)CounterElapsed) / (real32)PerfCountFrequency;
-                real32 FPS = (real32)PerfCountFrequency / (real32)CounterElapsed;
-                real32 MCPF = (real32)CyclesElapsed / (1000.0f * 1000.0f);
-
-/*
-                char Buffer[256];
-                sprintf(Buffer, "%fms/f, %ff/s, %fmc/f\n", MillisecondsPerFrame, FPS, MCPF);
-                OutputDebugStringA(Buffer);
-*/
-
-                LastCounter = EndCounter;
-                LastCycleCount = EndCycleCount;
-
-                game_input *Temp = NewInput;
-                NewInput = OldInput;
-                OldInput = Temp;
+            }
+            else
+            {
+                // TODO: Log error.
             }
         }
         else
